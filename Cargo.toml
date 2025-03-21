@@ -1,6 +1,11 @@
 [package]
-name = "aaa"
+name = "extract-audio-parquet"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+clap = { version = "4.5.23", features = ["derive"] }
+
+polars = { version = "0.46.0", features = ["full"] }
+
+anyhow = "*"
