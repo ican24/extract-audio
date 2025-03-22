@@ -26,6 +26,7 @@ fn main() -> Result<(), PolarsError> {
     // Parse the command line arguments
     let args = Args::parse();
 
+    // Convert the output path to a string
     let output_display: String = args.output.display().to_string();
 
     // Create the output folder if it doesn't exist
@@ -45,7 +46,7 @@ fn main() -> Result<(), PolarsError> {
         let all_paths = struct_series.field_by_name("path")?;
 
         // Extract files in parallel
-        (0..all_bytes.len()).into_par_iter().try_for_each(|idx| {
+        (0..all_paths.len()).into_par_iter().try_for_each(|idx| {
             let path = all_paths.get(idx)?;
             let bytes = all_bytes.get(idx)?;
 
@@ -65,8 +66,7 @@ fn main() -> Result<(), PolarsError> {
                 }
             };
 
-            let formatted_path = format!("{}/{}", output_display, filename);
-            let path = Path::new(&formatted_path);
+            let path = Path::new(&output_display).join(filename.clone());
             let bytes_len = bytes.len();
 
             write_file(path, bytes)?;
@@ -84,7 +84,7 @@ fn main() -> Result<(), PolarsError> {
     Ok(())
 }
 
-fn write_file(filename: &Path, data: &[u8]) -> std::io::Result<()> {
+fn write_file(filename: PathBuf, data: &[u8]) -> std::io::Result<()> {
     // Skip if the file already exists
     if filename.exists() {
         return Ok(());
