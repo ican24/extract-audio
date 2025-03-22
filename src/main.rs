@@ -2,16 +2,31 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use polars::prelude::*;
 use rayon::prelude::*;
+use arrow::ipc::reader::StreamReader;
+use arrow::record_batch::RecordBatch;
+use parquet::arrow::ArrowWriter;
+use parquet::file::properties::WriterProperties;
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq, ValueEnum)]
+enum Format {
+    ARROW,
+    PARQUET,
+}
 
 #[derive(Parser, Debug)]
 #[command(version, long_about = None)]
 struct Args {
-    /// The path to the parquet file
+    /// The path to the input file
     #[arg(long)]
-    parquet_file: PathBuf,
+    input: PathBuf,
+
+    /// File format
+    #[arg(long)]
+    #[clap(value_enum, default_value_t = Format::PARQUET)]
+    format: Format,
 
     /// The path to the output files
     #[arg(long)]
@@ -22,7 +37,7 @@ struct Args {
     debug: bool,
 }
 
-fn main() -> Result<(), PolarsError> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse the command line arguments
     let args = Args::parse();
 
@@ -32,10 +47,15 @@ fn main() -> Result<(), PolarsError> {
     // Create the output folder if it doesn't exist
     std::fs::create_dir_all(args.output)?;
 
-    // Read the parquet file
-    let df = ParquetReader::new(std::fs::File::open(args.parquet_file)?)
-        .with_columns(Some(vec!["audio".to_string()]))
-        .finish()?;
+    let filename = args.input;
+
+    // Convert the file to a DataFrame
+    let df = match args.format {
+        Format::ARROW => arrow_to_parquet(filename)?,
+        Format::PARQUET => read_parquet(filename)?,
+    };
+
+    // Conver
 
     println!("Number of rows: {}", df.height());
 
@@ -67,21 +87,61 @@ fn main() -> Result<(), PolarsError> {
             };
 
             let path = Path::new(&output_display).join(filename.clone());
-            let bytes_len = bytes.len();
 
             write_file(path, bytes)?;
-
-            if args.debug {
-                println!("path: {}, bytes len: {}", filename, bytes_len);
-            }
 
             Ok(())
         })?;
     }
 
-    println!("Done");
+    println!("Done!");
 
     Ok(())
+}
+
+
+fn arrow_to_parquet(filename: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
+    let file = File::open(filename)?;
+    let reader = StreamReader::try_new(file, None)?;
+
+    let batches: Vec<RecordBatch> = reader.collect::<Result<_, _>>()?;
+    let df = batches_to_parquet(&batches)?;
+
+    Ok(df)
+}
+
+fn batches_to_parquet(batches: &[RecordBatch]) -> Result<DataFrame, Box<dyn std::error::Error>> {
+    // Our output file
+    let tmp_file = tempfile::tempfile().unwrap();
+
+    // Write the batches to the file
+    let props = WriterProperties::builder().build();
+    let mut writer = ArrowWriter::try_new(tmp_file, batches[0].schema(), Some(props))?;
+
+    for batch in batches {
+        writer.write(batch)?;
+    }
+
+    let tmp_file = writer.into_inner().unwrap();
+
+    // writer.close()?;
+
+    // Read in parquet file
+    let df = ParquetReader::new(tmp_file)
+        .with_columns(Some(vec!["audio".to_string()]))
+        .finish()?;
+
+    Ok(df)
+}
+
+fn read_parquet(filename: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
+    let file = std::fs::File::open(filename)?;
+
+    let df = ParquetReader::new(file)
+        .with_columns(Some(vec!["audio".to_string()]))
+        .finish()?;
+
+    Ok(df)
 }
 
 fn write_file(filename: PathBuf, data: &[u8]) -> std::io::Result<()> {
