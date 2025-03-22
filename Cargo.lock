@@ -618,6 +618,7 @@ dependencies = [
  "anyhow",
  "clap",
  "polars",
+ "rayon",
 ]
 
 [[package]]

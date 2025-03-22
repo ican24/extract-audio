@@ -1,28 +1,98 @@
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::{Path, PathBuf};
+
+use clap::Parser;
 use polars::prelude::*;
+use rayon::prelude::*;
+
+#[derive(Parser, Debug)]
+#[command(version, long_about = None)]
+struct Args {
+    /// The path to the parquet file
+    #[arg(long)]
+    parquet_file: PathBuf,
+
+    /// The path to the output files
+    #[arg(long)]
+    output: PathBuf,
+
+    /// Debug mode
+    #[arg(long, default_value = "false")]
+    debug: bool,
+}
 
 fn main() -> Result<(), PolarsError> {
-    println!("Hello, world!");
+    // Parse the command line arguments
+    let args = Args::parse();
 
-    let lf = LazyFrame::scan_parquet("train-00000-of-00003.parquet", Default::default())?
-        .select([col("audio")]);
+    let output_display: String = args.output.display().to_string();
 
-    // iterate over the first 10 rows
-    let df = lf.collect()?.head(Some(10));
+    // Create the output folder if it doesn't exist
+    std::fs::create_dir_all(args.output)?;
+
+    // Read the parquet file
+    let df = ParquetReader::new(std::fs::File::open(args.parquet_file)?)
+        .with_columns(Some(vec!["audio".to_string()]))
+        .finish()?;
+
+    println!("Number of rows: {}", df.height());
 
     for row in df.iter() {
         let struct_series = row.struct_()?;
 
-        // let field_names = struct_series.fields_as_series().iter().map(|f| f.name().to_string()).collect::<Vec<_>>();
-
         let all_bytes = struct_series.field_by_name("bytes")?;
         let all_paths = struct_series.field_by_name("path")?;
 
-        for (idx, path) in all_paths.iter().enumerate() {
+        // Extract files in parallel
+        (0..all_bytes.len()).into_par_iter().try_for_each(|idx| {
+            let path = all_paths.get(idx)?;
             let bytes = all_bytes.get(idx)?;
-            println!("path: {}, bytes: {}", path, bytes);
-        }
+
+            let filename = match path {
+                AnyValue::String(b) => b.to_string(),
+                _ => {
+                    eprintln!("Unexpected value type for string");
+                    return Ok::<(), PolarsError>(());
+                }
+            };
+
+            let bytes = match bytes {
+                AnyValue::Binary(b) => b,
+                _ => {
+                    eprintln!("Unexpected value type for bytes");
+                    return Ok(());
+                }
+            };
+
+            let formatted_path = format!("{}/{}", output_display, filename);
+            let path = Path::new(&formatted_path);
+            let bytes_len = bytes.len();
+
+            write_file(path, bytes)?;
+
+            if args.debug {
+                println!("path: {}, bytes len: {}", filename, bytes_len);
+            }
+
+            Ok(())
+        })?;
     }
 
-    // read all data
+    println!("Done");
+
+    Ok(())
+}
+
+fn write_file(filename: &Path, data: &[u8]) -> std::io::Result<()> {
+    // Skip if the file already exists
+    if filename.exists() {
+        return Ok(());
+    }
+
+    // Write the file
+    let mut file = File::create(filename)?;
+    file.write_all(&data)?;
+
     Ok(())
 }

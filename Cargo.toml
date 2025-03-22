@@ -8,4 +8,6 @@ clap = { version = "4.5.23", features = ["derive"] }
 
 polars = { version = "0.46.0", features = ["full"] }
 
+rayon = { version = "1.10.0" }
+
 anyhow = "*"
