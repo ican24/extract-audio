@@ -30,5 +30,8 @@ jobs:
     runs-on: ${{ matrix.builder }}
 
     steps:
+      - name: Ls
+        run: ls ..
+
       - name: Build
         run: cargo build
