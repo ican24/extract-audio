@@ -15,5 +15,3 @@ arrow = { version = "54.3.0" }
 tempfile = "3"
 
 rayon = { version = "1.10.0" }
-
-anyhow = "*"
