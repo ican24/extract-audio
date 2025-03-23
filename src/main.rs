@@ -31,10 +31,6 @@ struct Args {
     /// The path to the output files
     #[arg(long)]
     output: PathBuf,
-
-    /// Debug mode
-    #[arg(long, default_value = "false")]
-    debug: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
