@@ -13,13 +13,13 @@ jobs:
       matrix:
         toolchain:
           - stable-x86_64-unknown-linux-gnu
-          - stable-x86_64-apple-darwin
+          - aarch64-apple-darwin
           - stable-x86_64-pc-windows-msvc
         include:
         - toolchain: stable-x86_64-unknown-linux-gnu
           builder: ubuntu-latest
           os: linux
-        - toolchain: stable-x86_64-apple-darwin
+        - toolchain: aarch64-apple-darwin
           builder: macos-latest
           os: macos
         - toolchain: stable-x86_64-pc-windows-msvc
