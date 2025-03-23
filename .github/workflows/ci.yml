@@ -9,40 +9,13 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        toolchain:
-          - stable-x86_64-unknown-linux-gnu
-          - aarch64-apple-darwin
-          - x86_64-apple-darwin
-          - x86_64-pc-windows-msvc
-        include:
-        - toolchain: stable-x86_64-unknown-linux-gnu
-          builder: ubuntu-latest
-          os: linux
-        - toolchain: aarch64-apple-darwin
-          builder: macos-latest
-          os: macos
-        - toolchain: x86_64-apple-darwin
-          builder: macos-latest
-          os: macos
-        - toolchain: x86_64-pc-windows-msvc
-          builder: windows-latest
-          os: windows
-
     name: build - ${{ matrix.toolchain }}
-    runs-on: ${{ matrix.builder }}
+    runs-on: ["ubuntu-latest", "macos-latest", "windows-latest"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.toolchain }}
-          target: ${{ matrix.target }}
-          override: true
-
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
       - name: Build
         run: cargo build
