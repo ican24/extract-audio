@@ -30,8 +30,15 @@ jobs:
     runs-on: ${{ matrix.builder }}
 
     steps:
-      - name: Ls
-        run: ls ..
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          target: ${{ matrix.target }}
+          override: true
 
       - name: Build
         run: cargo build
