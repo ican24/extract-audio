@@ -1,11 +1,7 @@
-name: CI
+name: build
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   push:
-    branches:
-      - main
 
 jobs:
   build:
@@ -23,6 +19,6 @@ jobs:
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      
+
       - name: Build
         run: cargo build
