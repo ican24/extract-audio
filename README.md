@@ -47,5 +47,5 @@ podman machine set --cpus 4 --memory 8192
 1. make binaries:
 
 ```shell
-goreleaser build --clean --snapshot --id extract-audio
+goreleaser build --clean --snapshot --id extract-audio --timeout 60m
 ```
