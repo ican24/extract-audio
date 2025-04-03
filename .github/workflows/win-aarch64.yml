@@ -47,4 +47,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: extract-audio_aarch64_msvc_windows.zip
-        path: C:\Users\runneradmin\extract-audio_x86_64_msvc_windows.zip
+        path: C:\Users\runneradmin\extract-audio_aarch64_msvc_windows.zip
