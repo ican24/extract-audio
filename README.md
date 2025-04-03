@@ -29,3 +29,20 @@ extract-audio --format parquet --input train-00000-of-00010.parquet --output fil
 
 extract-audio --format arrow --input data-00000-of-01189.arrow --output files-arrow/
 ```
+
+## Build
+
+You need: cargo, rustc, cross, podman, goreleaser.
+
+0. build images:
+
+```shell
+podman build --platform=linux/amd64 -f Dockerfile.aarch64-unknown-linux-gnu -t aarch64-unknown-linux-gnu:ouch .
+podman build --platform=linux/amd64 -f Dockerfile.x86_64-unknown-linux-gnu -t x86_64-unknown-linux-gnu:ouch .
+```
+
+1. make binaries:
+
+```shell
+goreleaser build --clean --snapshot --id extract-audio
+```
