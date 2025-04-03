@@ -1,0 +1,50 @@
+name: win-x86_64
+
+on:
+  # push:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x86_64
+            os: windows-2022
+    
+    steps:
+    - name: rust version
+      run: rustc --version
+
+    - name: cargo version
+      run: cargo --version
+
+    - name: add x86_64-pc-windows-msvc target
+      run: rustup target add x86_64-pc-windows-msvc
+
+    - name: cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: build
+      run: cargo install extract-audio --target x86_64-pc-windows-msvc --git https://github.com/egorsmkv/extract-audio
+
+    - name: archive extract-audio
+      run: Compress-Archive -Path C:\Users\runneradmin\.cargo\bin\extract-audio.exe -DestinationPath C:\Users\runneradmin\extract-audio_x86_64_msvc_windows.zip
+
+    - name: upload release artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: extract-audio_x86_64_msvc_windows.zip
+        path: C:\Users\runneradmin\extract-audio_x86_64_msvc_windows.zip
