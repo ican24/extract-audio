@@ -13,7 +13,7 @@ env:
 
 builds:
   - builder: rust
-    id: ouch
+    id: extract-audio
     command: build
     tool: cross
     targets:
