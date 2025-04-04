@@ -1,5 +1,9 @@
+dist/
+
 target/
 files/
 
 *.parquet
 *.arrow
+
+.DS_Store
