@@ -19,11 +19,13 @@ jobs:
             os: windows-2022
     
     steps:
-    - name: rust version
-      run: rustc --version
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: cargo version
-      run: cargo --version
+    - name: Toolchain versions
+      run: |
+        rustc --version
+        cargo --version
 
     - name: add x86_64-pc-windows-msvc target
       run: rustup target add x86_64-pc-windows-msvc
