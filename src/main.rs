@@ -37,6 +37,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse the command line arguments
     let args = Args::parse();
 
+    // Check if the input exists
+    if !args.input.exists() {
+        eprintln!("Input file does not exist: {}", args.input.display());
+        std::process::exit(1);
+    }
+    // Check if the input is a file
+    if !args.input.is_file() {
+        eprintln!("Input is not a file: {}", args.input.display());
+        std::process::exit(1);
+    }
+
     // Convert the output path to a string
     let output_display: String = args.output.display().to_string();
 
