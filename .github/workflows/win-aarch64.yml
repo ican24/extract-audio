@@ -1,7 +1,6 @@
 name: win-aarch64
 
 on:
-  # push:
   workflow_dispatch:
 
 env:
@@ -20,10 +19,10 @@ jobs:
         rustc --version
         cargo --version
 
-    - name: add aarch64-pc-windows-msvc target
+    - name: Add aarch64-pc-windows-msvc target
       run: rustup target add aarch64-pc-windows-msvc
 
-    - name: cache
+    - name: Cache
       uses: actions/cache@v4
       with:
         path: |
@@ -32,14 +31,11 @@ jobs:
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: build
+    - name: Build
       run: cargo install extract-audio --target aarch64-pc-windows-msvc --git https://github.com/egorsmkv/extract-audio
 
-    - name: archive extract-audio
-      run: Compress-Archive -Path C:\Users\runneradmin\.cargo\bin\extract-audio.exe -DestinationPath C:\Users\runneradmin\extract-audio_aarch64_msvc_windows.zip
-
-    - name: upload release artifact
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: extract-audio_aarch64_msvc_windows.zip
-        path: C:\Users\runneradmin\extract-audio_aarch64_msvc_windows.zip
+        name: extract-audio_aarch64_msvc_windows.exe
+        path: C:\Users\runneradmin\.cargo\bin\extract-audio.exe
