@@ -1,6 +1,6 @@
 # `extract-audio`
 
-[![CI](https://github.com/egorsmkv/extract-audio/actions/workflows/ci.yml/badge.svg)](https://github.com/egorsmkv/extract-audio/actions/workflows/ci.yml)
+[![Build](https://github.com/egorsmkv/extract-audio/actions/workflows/build.yml/badge.svg)](https://github.com/egorsmkv/extract-audio/actions/workflows/build.yml)
 [![win-x86_64](https://github.com/egorsmkv/extract-audio/actions/workflows/win-x86_64.yml/badge.svg)](https://github.com/egorsmkv/extract-audio/actions/workflows/win-x86_64.yml)
 [![win-aarch64](https://github.com/crs-org/extract-audio/actions/workflows/win-aarch64.yml/badge.svg)](https://github.com/crs-org/extract-audio/actions/workflows/win-aarch64.yml)
 
