@@ -8,8 +8,8 @@ clap = { version = "4.5.36", features = ["derive"] }
 
 polars = { version = "0.46.0", features = ["full"] }
 
-parquet = { version = "54.3.1" }
-arrow = { version = "54.3.1" }
+parquet = { version = "55" }
+arrow = { version = "55" }
 
 tempfile = "3"
 
