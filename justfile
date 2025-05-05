@@ -4,6 +4,9 @@ fmt:
 release: fmt
     cargo build --release
 
+clippy:
+    cargo clippy --all-targets
+
 archive:
     ouch compress dist/extract-audio_aarch64-apple-darwin dist/extract-audio_aarch64-apple-darwin.zip
     ouch compress dist/extract-audio_aarch64-unknown-linux-gnu dist/extract-audio_aarch64-unknown-linux-gnu.zip

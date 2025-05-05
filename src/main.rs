@@ -12,8 +12,8 @@ use parquet::file::properties::WriterProperties;
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq, ValueEnum)]
 enum Format {
-    ARROW,
-    PARQUET,
+    Arrow,
+    Parquet,
 }
 
 #[derive(Parser, Debug)]
@@ -25,7 +25,7 @@ struct Args {
 
     /// File format
     #[arg(long)]
-    #[clap(value_enum, default_value_t = Format::PARQUET)]
+    #[clap(value_enum, default_value_t = Format::Parquet)]
     format: Format,
 
     /// The path to the output files
@@ -58,8 +58,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Convert the file to a DataFrame
     let df = match args.format {
-        Format::ARROW => arrow_to_parquet(filename)?,
-        Format::PARQUET => read_parquet(filename)?,
+        Format::Arrow => arrow_to_parquet(filename)?,
+        Format::Parquet => read_parquet(filename)?,
     };
 
     // Conver
@@ -159,7 +159,7 @@ fn write_file(filename: PathBuf, data: &[u8]) -> std::io::Result<()> {
 
     // Write the file
     let mut file = File::create(filename)?;
-    file.write_all(&data)?;
+    file.write_all(data)?;
 
     Ok(())
 }
