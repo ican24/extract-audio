@@ -1,6 +1,6 @@
 [package]
 name = "extract-audio"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -8,8 +8,8 @@ clap = { version = "4.5.42", features = ["derive"] }
 
 polars = { version = "0.50.0", features = ["full"] }
 
-parquet = { version = "55" }
-arrow = { version = "55" }
+parquet = { version = "56" }
+arrow = { version = "56" }
 
 tempfile = "3"
 

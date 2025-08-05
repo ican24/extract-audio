@@ -2,13 +2,13 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
-use clap::{Parser, ValueEnum};
-use polars::prelude::*;
-use rayon::prelude::*;
 use arrow::ipc::reader::StreamReader;
 use arrow::record_batch::RecordBatch;
+use clap::{Parser, ValueEnum};
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
+use polars::prelude::*;
+use rayon::prelude::*;
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq, ValueEnum)]
 enum Format {
@@ -31,6 +31,59 @@ struct Args {
     /// The path to the output files
     #[arg(long)]
     output: PathBuf,
+}
+
+fn arrow_to_parquet(filename: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
+    let file = File::open(filename)?;
+    let reader = StreamReader::try_new(file, None)?;
+
+    let batches: Vec<RecordBatch> = reader.collect::<Result<_, _>>()?;
+    let df = batches_to_parquet(&batches)?;
+
+    Ok(df)
+}
+
+fn batches_to_parquet(batches: &[RecordBatch]) -> Result<DataFrame, Box<dyn std::error::Error>> {
+    // Our output file
+    let tmp_file = tempfile::tempfile()?;
+
+    // Write the batches to the file
+    let props = WriterProperties::builder().build();
+    let mut writer = ArrowWriter::try_new(tmp_file, batches[0].schema(), Some(props))?;
+
+    for batch in batches {
+        writer.write(batch)?;
+    }
+
+    let tmp_file = writer.into_inner()?;
+
+    // Read in parquet file
+    let df = ParquetReader::new(tmp_file)
+        .with_columns(Some(vec!["audio".to_string()]))
+        .finish()?;
+
+    Ok(df)
+}
+
+fn read_parquet(filename: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
+    let file = std::fs::File::open(filename)?;
+
+    let df = ParquetReader::new(file)
+        .with_columns(Some(vec!["audio".to_string()]))
+        .finish()?;
+
+    Ok(df)
+}
+
+fn write_file(filename: PathBuf, data: &[u8]) -> std::io::Result<()> {
+    // Skip if the file already exists
+    if !filename.exists() {
+        // Write the file
+        let mut file = File::create(filename)?;
+        file.write_all(data)?;
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -102,64 +155,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("Done!");
-
-    Ok(())
-}
-
-
-fn arrow_to_parquet(filename: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
-    let file = File::open(filename)?;
-    let reader = StreamReader::try_new(file, None)?;
-
-    let batches: Vec<RecordBatch> = reader.collect::<Result<_, _>>()?;
-    let df = batches_to_parquet(&batches)?;
-
-    Ok(df)
-}
-
-fn batches_to_parquet(batches: &[RecordBatch]) -> Result<DataFrame, Box<dyn std::error::Error>> {
-    // Our output file
-    let tmp_file = tempfile::tempfile().unwrap();
-
-    // Write the batches to the file
-    let props = WriterProperties::builder().build();
-    let mut writer = ArrowWriter::try_new(tmp_file, batches[0].schema(), Some(props))?;
-
-    for batch in batches {
-        writer.write(batch)?;
-    }
-
-    let tmp_file = writer.into_inner().unwrap();
-
-    // writer.close()?;
-
-    // Read in parquet file
-    let df = ParquetReader::new(tmp_file)
-        .with_columns(Some(vec!["audio".to_string()]))
-        .finish()?;
-
-    Ok(df)
-}
-
-fn read_parquet(filename: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
-    let file = std::fs::File::open(filename)?;
-
-    let df = ParquetReader::new(file)
-        .with_columns(Some(vec!["audio".to_string()]))
-        .finish()?;
-
-    Ok(df)
-}
-
-fn write_file(filename: PathBuf, data: &[u8]) -> std::io::Result<()> {
-    // Skip if the file already exists
-    if filename.exists() {
-        return Ok(());
-    }
-
-    // Write the file
-    let mut file = File::create(filename)?;
-    file.write_all(data)?;
 
     Ok(())
 }
