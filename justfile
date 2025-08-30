@@ -2,7 +2,7 @@ fmt:
     cargo fmt
 
 release: fmt
-    cargo build --release
+    cargo +nightly build --release
 
 clippy:
     cargo clippy --all-targets
