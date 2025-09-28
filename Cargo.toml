@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }
 
-polars = { version = "0.50.0", features = ["full"] }
+polars = { version = "0.51.0", features = ["full"] }
 
 parquet = { version = "56" }
 arrow = { version = "56" }
