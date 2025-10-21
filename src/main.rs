@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use arrow::ipc::reader::StreamReader;
 use arrow::record_batch::RecordBatch;
@@ -20,8 +21,12 @@ enum Format {
 #[command(version, long_about = None)]
 struct Args {
     /// The path to the input file
-    #[arg(long)]
-    input: PathBuf,
+    #[arg(long, conflicts_with = "input_dir")]
+    input: Option<PathBuf>,
+
+    /// The path to a directory with input files
+    #[arg(long, conflicts_with = "input")]
+    input_dir: Option<PathBuf>,
 
     /// File format
     #[arg(long)]
@@ -66,7 +71,7 @@ fn batches_to_parquet(batches: &[RecordBatch]) -> Result<DataFrame, Box<dyn std:
 }
 
 fn read_parquet(filename: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
-    let file = std::fs::File::open(filename)?;
+    let file = File::open(filename)?;
 
     let df = ParquetReader::new(file)
         .with_columns(Some(vec!["audio".to_string()]))
@@ -86,38 +91,18 @@ fn write_file(filename: PathBuf, data: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Parse the command line arguments
-    let args = Args::parse();
-
-    // Check if the input exists
-    if !args.input.exists() {
-        eprintln!("Input file does not exist: {}", args.input.display());
-        std::process::exit(1);
-    }
-    // Check if the input is a file
-    if !args.input.is_file() {
-        eprintln!("Input is not a file: {}", args.input.display());
-        std::process::exit(1);
-    }
-
-    // Convert the output path to a string
-    let output_display: String = args.output.display().to_string();
-
-    // Create the output folder if it doesn't exist
-    std::fs::create_dir_all(args.output)?;
-
-    let filename = args.input;
-
+fn process_file(
+    filename: PathBuf,
+    format: Format,
+    output_dir: &Path,
+) -> Result<usize, Box<dyn std::error::Error>> {
     // Convert the file to a DataFrame
-    let df = match args.format {
+    let df = match format {
         Format::Arrow => arrow_to_parquet(filename)?,
         Format::Parquet => read_parquet(filename)?,
     };
 
-    // Conver
-
-    println!("Number of rows: {}", df.height());
+    let num_rows = df.height();
 
     for row in df.iter() {
         let struct_series = row.struct_()?;
@@ -132,26 +117,80 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let filename = match path {
                 AnyValue::String(b) => b.to_string(),
-                _ => {
-                    eprintln!("Unexpected value type for string");
-                    return Ok::<(), PolarsError>(());
-                }
+                _ => return Ok::<(), PolarsError>(()),
             };
 
             let bytes = match bytes {
                 AnyValue::Binary(b) => b,
-                _ => {
-                    eprintln!("Unexpected value type for bytes");
-                    return Ok(());
-                }
+                _ => return Ok(()),
             };
 
-            let path = Path::new(&output_display).join(filename.clone());
-
+            let path = output_dir.join(filename.clone());
             write_file(path, bytes)?;
-
             Ok(())
         })?;
+    }
+    Ok(num_rows)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+
+    if !args.input.is_some() && !args.input_dir.is_some() {
+        eprintln!("Either --input or --input-dir must be provided.");
+        std::process::exit(1);
+    }
+
+    // Create the output folder if it doesn't exist
+    std::fs::create_dir_all(args.output.clone())?;
+
+    if let Some(input_file) = args.input {
+        if !input_file.is_file() {
+            eprintln!("Input is not a file: {}", input_file.display());
+            std::process::exit(1);
+        }
+        println!("Processing file: {}", input_file.display());
+        let rows = process_file(input_file, args.format, &args.output)?;
+        println!("Total number of rows processed: {}", rows);
+    }
+
+    if let Some(input_dir) = args.input_dir {
+        if !input_dir.is_dir() {
+            eprintln!(
+                "Input directory does not exist or is not a directory: {}",
+                input_dir.display()
+            );
+            std::process::exit(1);
+        }
+
+        let files_to_process: Vec<_> = std::fs::read_dir(input_dir)?
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry.path().is_file()
+                    && entry
+                        .path()
+                        .extension()
+                        .map_or(false, |ext| ext == "parquet" || ext == "arrow")
+            })
+            .collect();
+
+        let total_rows = AtomicUsize::new(0);
+
+        files_to_process.into_par_iter().for_each(|entry| {
+            let path = entry.path();
+            println!("Processing file: {}", path.display());
+            match process_file(path, args.format, &args.output) {
+                Ok(rows) => {
+                    total_rows.fetch_add(rows, Ordering::SeqCst);
+                }
+                Err(e) => eprintln!("Error processing file {}: {}", entry.path().display(), e),
+            }
+        });
+
+        println!(
+            "Total number of rows processed: {}",
+            total_rows.load(Ordering::SeqCst)
+        );
     }
 
     println!("Done!");
