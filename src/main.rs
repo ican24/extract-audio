@@ -1,13 +1,14 @@
 use std::fs::{File, create_dir_all, read_dir};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process;
+use std::process::{self};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
 use arrow::ipc::reader::StreamReader;
 use arrow::record_batch::RecordBatch;
-use clap::{Parser, ValueEnum};
+use clap::{ArgAction, Parser, ValueEnum};
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use polars::prelude::*;
@@ -42,6 +43,10 @@ struct Args {
     /// Number of threads to use for processing
     #[arg(long, default_value_t = 3)]
     threads: usize,
+
+    /// CSV file where transcriptions should be written
+    #[arg(long, action = ArgAction::Set)]
+    metadata_file: Option<PathBuf>,
 }
 
 fn arrow_to_parquet(filename: &Path) -> Result<DataFrame> {
@@ -73,10 +78,11 @@ fn batches_to_parquet(batches: &[RecordBatch]) -> Result<DataFrame> {
 
     let tmp_file = writer.into_inner()?;
 
-    // Read in parquet file
+    // Read in parquet file and unnest the audio column
     let df = ParquetReader::new(tmp_file)
-        .with_columns(Some(vec!["audio".to_string()]))
-        .finish()?;
+        .with_columns(Some(vec!["audio".to_string(), "transcription".to_string()]))
+        .finish()?
+        .unnest(["audio"])?;
 
     Ok(df)
 }
@@ -86,9 +92,10 @@ fn read_parquet(filename: &Path) -> Result<DataFrame> {
         .with_context(|| format!("Failed to open parquet file: {}", filename.display()))?;
 
     let df = ParquetReader::new(file)
-        .with_columns(Some(vec!["audio".to_string()]))
+        .with_columns(Some(vec!["audio".to_string(), "transcription".to_string()]))
         .finish()
-        .context("Failed to read parquet file into DataFrame")?;
+        .context("Failed to read parquet file into DataFrame")?
+        .unnest(["audio"])?;
 
     Ok(df)
 }
@@ -106,7 +113,12 @@ fn write_file(filename: &Path, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn process_file(filename: &Path, format: Format, output_dir: &Path) -> Result<usize> {
+fn process_file(
+    filename: &Path,
+    format: Format,
+    output_dir: &Path,
+    metadata_records: &Mutex<Vec<(String, String)>>,
+) -> Result<usize> {
     // Convert the file to a DataFrame
     let df = match format {
         Format::Arrow => arrow_to_parquet(filename)
@@ -115,36 +127,50 @@ fn process_file(filename: &Path, format: Format, output_dir: &Path) -> Result<us
             .with_context(|| format!("Error processing parquet file {}", filename.display()))?,
     };
 
+    // Extract the series from the DataFrame
+    let path_series = df.column("path")?.str()?;
+    let array_series = df.column("bytes")?.binary()?;
+    let transcription_series = df.column("transcription")?.str()?;
+
     let num_rows = df.height();
 
-    for row in df.iter() {
-        let struct_series = row.struct_()?;
+    let records: Vec<_> = (0..num_rows)
+        .into_par_iter()
+        .filter_map(|i| {
+            if let (Some(path_val), Some(transcription), Some(array_series_inner)) = (
+                path_series.get(i),
+                transcription_series.get(i),
+                array_series.get(i),
+            ) {
+                Some((path_val, transcription, array_series_inner))
+            } else {
+                None
+            }
+        })
+        .collect();
 
-        let all_bytes = struct_series.field_by_name("bytes")?;
-        let all_paths = struct_series.field_by_name("path")?;
+    let local_metadata: Vec<(String, String)> = records
+        .par_iter()
+        .map(|(path_val, transcription, array_series_inner)| {
+            let original_path = Path::new(path_val);
+            let file_stem = original_path.file_stem().unwrap_or_default();
+            let extension = original_path.extension().unwrap_or_default();
 
-        // Extract files in parallel
-        (0..all_paths.len()).into_par_iter().try_for_each(|idx| {
-            let path = all_paths.get(idx)?;
-            let bytes = all_bytes.get(idx)?;
+            let audio_filename_str = format!(
+                "{}.{}",
+                file_stem.to_string_lossy(),
+                extension.to_string_lossy()
+            );
+            let audio_filename = output_dir.join(&audio_filename_str);
+            let audio_data: &[u8] = array_series_inner;
+            write_file(&audio_filename, audio_data).expect("Failed to write audio file");
 
-            let filename = match path {
-                AnyValue::String(b) => b.to_string(),
-                _ => return Ok::<(), PolarsError>(()),
-            };
+            (audio_filename_str, transcription.to_string())
+        })
+        .collect();
 
-            let bytes = match bytes {
-                AnyValue::Binary(b) => b,
-                _ => return Ok(()),
-            };
+    metadata_records.lock().unwrap().extend(local_metadata);
 
-            let path = output_dir.join(filename.clone());
-
-            let _ = write_file(&path, bytes);
-
-            Ok(())
-        })?;
-    }
     Ok(num_rows)
 }
 
@@ -169,13 +195,15 @@ fn main() -> Result<()> {
         )
     })?;
 
+    let metadata_records = Mutex::new(Vec::new());
+
     if let Some(input_file) = args.input {
         if !input_file.is_file() {
             eprintln!("Input is not a file: {}", input_file.display());
             process::exit(1);
         }
         println!("Processing file: {}...", input_file.display());
-        let rows = process_file(&input_file, args.format, &args.output)?;
+        let rows = process_file(&input_file, args.format, &args.output, &metadata_records)?;
         println!("Total number of rows processed: {}", rows);
     }
 
@@ -192,7 +220,7 @@ fn main() -> Result<()> {
             .filter_map(Result::ok)
             .filter(|entry| {
                 entry.path().is_file()
-                    && entry
+                    && entry // TODO: this is not correct, should be based on format
                         .path()
                         .extension()
                         .is_some_and(|ext| ext == "parquet" || ext == "arrow")
@@ -204,7 +232,7 @@ fn main() -> Result<()> {
         files_to_process.into_iter().for_each(|entry| {
             let path = entry.path();
             println!("Processing file: {}...", path.display());
-            match process_file(&path, args.format, &args.output) {
+            match process_file(&path, args.format, &args.output, &metadata_records) {
                 Ok(rows) => {
                     total_rows.fetch_add(rows, Ordering::SeqCst);
                 }
@@ -216,6 +244,31 @@ fn main() -> Result<()> {
             "Total number of rows processed: {}",
             total_rows.load(Ordering::SeqCst)
         );
+    }
+
+    if let Some(metadata_file_path) = args.metadata_file {
+        println!("Writing metadata to {}...", metadata_file_path.display());
+        let records = metadata_records.into_inner().unwrap();
+        if !records.is_empty() {
+            let mut df = DataFrame::new(vec![
+                Column::new(
+                    "file_name".into(),
+                    records.iter().map(|(f, _)| f.as_str()).collect::<Vec<_>>(),
+                ),
+                Column::new(
+                    "transcription".into(),
+                    records.iter().map(|(_, t)| t.as_str()).collect::<Vec<_>>(),
+                ),
+            ])?;
+
+            let mut file = File::create(&metadata_file_path).with_context(|| {
+                format!(
+                    "Failed to create metadata file: {}",
+                    metadata_file_path.display()
+                )
+            })?;
+            CsvWriter::new(&mut file).finish(&mut df)?;
+        }
     }
 
     println!("Done!");

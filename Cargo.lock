@@ -952,6 +952,7 @@ dependencies = [
  "anyhow",
  "arrow",
  "clap",
+ "csv",
  "parquet",
  "polars",
  "rayon",
