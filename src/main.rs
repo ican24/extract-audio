@@ -36,6 +36,10 @@ struct Args {
     /// The path to the output files
     #[arg(long)]
     output: PathBuf,
+
+    /// Number of threads to use for processing
+    #[arg(long, default_value_t = 3)]
+    threads: usize,
 }
 
 fn arrow_to_parquet(filename: PathBuf) -> Result<DataFrame, Box<dyn std::error::Error>> {
@@ -136,6 +140,11 @@ fn process_file(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
+    // Configure the global thread pool for Rayon
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(args.threads)
+        .build_global()?;
+
     if !args.input.is_some() && !args.input_dir.is_some() {
         eprintln!("Either --input or --input-dir must be provided.");
         std::process::exit(1);
@@ -176,7 +185,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let total_rows = AtomicUsize::new(0);
 
-        files_to_process.into_par_iter().for_each(|entry| {
+        files_to_process.into_iter().for_each(|entry| {
             let path = entry.path();
             println!("Processing file: {}", path.display());
             match process_file(path, args.format, &args.output) {
