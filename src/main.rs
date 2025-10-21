@@ -1,4 +1,4 @@
-use std::fs::{create_dir_all, read_dir, File};
+use std::fs::{File, create_dir_all, read_dir};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -11,7 +11,7 @@ use clap::{Parser, ValueEnum};
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use polars::prelude::*;
-use rayon::{prelude::*, ThreadPoolBuilder};
+use rayon::{ThreadPoolBuilder, prelude::*};
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq, ValueEnum)]
 enum Format {
@@ -47,8 +47,8 @@ struct Args {
 fn arrow_to_parquet(filename: &Path) -> Result<DataFrame> {
     let file = File::open(filename)
         .with_context(|| format!("Failed to open arrow file: {}", filename.display()))?;
-    let reader = StreamReader::try_new(file, None)
-        .context("Failed to create arrow stream reader")?;
+    let reader =
+        StreamReader::try_new(file, None).context("Failed to create arrow stream reader")?;
 
     let batches: Vec<RecordBatch> = reader
         .collect::<std::result::Result<_, _>>()
@@ -162,8 +162,12 @@ fn main() -> Result<()> {
     }
 
     // Create the output folder if it doesn't exist
-    create_dir_all(&args.output)
-        .with_context(|| format!("Failed to create output directory: {}", args.output.display()))?;
+    create_dir_all(&args.output).with_context(|| {
+        format!(
+            "Failed to create output directory: {}",
+            args.output.display()
+        )
+    })?;
 
     if let Some(input_file) = args.input {
         if !input_file.is_file() {
@@ -191,7 +195,7 @@ fn main() -> Result<()> {
                     && entry
                         .path()
                         .extension()
-                        .map_or(false, |ext| ext == "parquet" || ext == "arrow")
+                        .is_some_and(|ext| ext == "parquet" || ext == "arrow")
             })
             .collect();
 
