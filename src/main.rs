@@ -80,7 +80,7 @@ fn batches_to_parquet(batches: &[RecordBatch]) -> Result<DataFrame> {
 
     // Read in parquet file and unnest the audio column
     let df = ParquetReader::new(tmp_file)
-        .with_columns(Some(vec!["audio".to_string(), "transcription".to_string()]))
+        .with_columns(Some(vec!["audio".to_string(), "transcript".to_string()]))
         .finish()?
         .unnest(["audio"])?;
 
