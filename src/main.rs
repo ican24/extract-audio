@@ -44,7 +44,7 @@ struct Args {
     #[arg(long, default_value_t = 3)]
     threads: usize,
 
-    /// CSV file where transcriptions should be written
+    /// CSV file where transcripts should be written
     #[arg(long, action = ArgAction::Set)]
     metadata_file: Option<PathBuf>,
 }
@@ -80,7 +80,7 @@ fn batches_to_parquet(batches: &[RecordBatch]) -> Result<DataFrame> {
 
     // Read in parquet file and unnest the audio column
     let df = ParquetReader::new(tmp_file)
-        .with_columns(Some(vec!["audio".to_string(), "transcription".to_string()]))
+        .with_columns(Some(vec!["audio".to_string(), "transcript".to_string()]))
         .finish()?
         .unnest(["audio"])?;
 
@@ -92,7 +92,7 @@ fn read_parquet(filename: &Path) -> Result<DataFrame> {
         .with_context(|| format!("Failed to open parquet file: {}", filename.display()))?;
 
     let df = ParquetReader::new(file)
-        .with_columns(Some(vec!["audio".to_string(), "transcription".to_string()]))
+        .with_columns(Some(vec!["audio".to_string(), "transcript".to_string()]))
         .finish()
         .context("Failed to read parquet file into DataFrame")?
         .unnest(["audio"])?;
@@ -130,19 +130,19 @@ fn process_file(
     // Extract the series from the DataFrame
     let path_series = df.column("path")?.str()?;
     let array_series = df.column("bytes")?.binary()?;
-    let transcription_series = df.column("transcription")?.str()?;
+    let transcript_series = df.column("transcript")?.str()?;
 
     let num_rows = df.height();
 
     let records: Vec<_> = (0..num_rows)
         .into_par_iter()
         .filter_map(|i| {
-            if let (Some(path_val), Some(transcription), Some(array_series_inner)) = (
+            if let (Some(path_val), Some(transcript), Some(array_series_inner)) = (
                 path_series.get(i),
-                transcription_series.get(i),
+                transcript_series.get(i),
                 array_series.get(i),
             ) {
-                Some((path_val, transcription, array_series_inner))
+                Some((path_val, transcript, array_series_inner))
             } else {
                 None
             }
@@ -151,7 +151,7 @@ fn process_file(
 
     let local_metadata: Vec<(String, String)> = records
         .par_iter()
-        .map(|(path_val, transcription, array_series_inner)| {
+        .map(|(path_val, transcript, array_series_inner)| {
             let original_path = Path::new(path_val);
             let file_stem = original_path.file_stem().unwrap_or_default();
             let extension = original_path.extension().unwrap_or_default();
@@ -165,7 +165,7 @@ fn process_file(
             let audio_data: &[u8] = array_series_inner;
             write_file(&audio_filename, audio_data).expect("Failed to write audio file");
 
-            (audio_filename_str, transcription.to_string())
+            (audio_filename_str, transcript.to_string())
         })
         .collect();
 
@@ -256,7 +256,7 @@ fn main() -> Result<()> {
                     records.iter().map(|(f, _)| f.as_str()).collect::<Vec<_>>(),
                 ),
                 Column::new(
-                    "transcription".into(),
+                    "transcript".into(),
                     records.iter().map(|(_, t)| t.as_str()).collect::<Vec<_>>(),
                 ),
             ])?;
